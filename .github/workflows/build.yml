@@ -1,0 +1,34 @@
+name: whisper-vulkan
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: v1.9.2
+      - name: Vulkan SDK
+        shell: pwsh
+        run: |
+          $v = "1.4.313.2"
+          curl.exe -fsSL -o vk.exe "https://sdk.lunarg.com/sdk/download/$v/windows/vulkansdk-windows-X64-$v.exe"
+          Start-Process -Wait -FilePath .\vk.exe -ArgumentList "--accept-licenses","--default-answer","--confirm-command","install"
+          "VULKAN_SDK=C:\VulkanSDK\$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "C:\VulkanSDK\$v\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DWHISPER_SDL2=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON
+      - name: Build
+        run: cmake --build build --config Release -j 4
+      - name: Pack
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory out | Out-Null
+          Copy-Item build/bin/Release/whisper-cli.exe out/
+          Copy-Item build/bin/Release/*.dll out/
+          Compress-Archive -Path out/* -DestinationPath whisper-vulkan-x64-v1.9.2.zip
+          Get-FileHash whisper-vulkan-x64-v1.9.2.zip -Algorithm SHA256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whisper-vulkan-x64
+          path: whisper-vulkan-x64-v1.9.2.zip
